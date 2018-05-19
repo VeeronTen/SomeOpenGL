@@ -1,12 +1,10 @@
-// Include standard headers
 #include <stdio.h>
 #include <stdlib.h>
 #include <iostream>
 #include <time.h>
-#include <vector>
-// Include GLEW
+
 #include <GL/glew.h>
-// Include GLFW
+
 #include <glfw3.h>
 GLFWwindow* window;
 
@@ -16,53 +14,12 @@ GLFWwindow* window;
 #include <glm/gtx/transform.hpp>
 using namespace glm;
 
-#include <common/shader.hpp>
+#include "common/shader.hpp"
 
-GLfloat valueByAbs(GLfloat abs) {
-	GLfloat result = rand() % (int)(200*abs + 1) / 100.0 - abs;
-	std::cout << "valueByAbs(" << abs << ") => " << result << std::endl;
-	return result;
-}
-
-GLfloat probNeg(GLfloat value) {
-	GLfloat result = rand() % 2 ? value : -value;
-	std::cout << "probNeg(" << value << ") => " << result << std::endl;
-	return result;
-}
-
-GLfloat absYbyX(GLfloat x) {
-	GLfloat result = sqrt(1 - pow(x, 2));
-	std::cout << "absYbyX(" << x << ") => " << result << std::endl;
-	return result;
-}
-
-GLfloat absZbyXY(GLfloat x, GLfloat y) {
-	GLfloat result = sqrt(1 - pow(x, 2) - pow(y, 2));
-	std::cout << "absZbyXY(" << x << ", " << y << ") => " << result << std::endl;
-	return result;
-}
-
-std::vector<GLfloat> pickle_vertex_buffer_data;
-
-std::vector<GLfloat> generatePoint() {
-	std::vector<GLfloat> result;
-
-	GLfloat x = valueByAbs(1.0);
-	GLfloat y = valueByAbs(absYbyX(x));
-	GLfloat z = probNeg(absZbyXY(x, y));
-
-	result.push_back(x);
-	result.push_back(y);
-	result.push_back(z);
-	std::cout << "point x: " << x << " y: " << y <<  " z: " << z << std::endl;
-	return result;
-}
-
-void generatePickle() {
-	std::vector<GLfloat> point;
-	point = generatePoint();
-	pickle_vertex_buffer_data.insert(pickle_vertex_buffer_data.end(), point.begin(), point.end());
-}
+#define CAMERA_RADIUS 5
+#define CAMERA_HEIGHT 3
+#define CAMERA_VIEW_HEIGHT 1
+#define RADIAN_SPEED 0.0005
 
 int main( void )
 {
@@ -126,7 +83,6 @@ int main( void )
 	// Model matrix : an identity matrix (model will be at the origin)
 	glm::mat4 Model      = glm::mat4(1.0f);
 	glm::mat4 Transform2     = glm::translate(glm::mat4(), glm::vec3(-3.0f, 0.0f, 0.0f));
-	glm::mat4 PickleModel     = glm::translate(glm::mat4(), glm::vec3(0.0f, 2.0f, 0.0f));
 	// Our vertices. Tree consecutive floats give a 3D vertex; Three consecutive vertices give a triangle.
 	// A cube has 6 faces with 2 triangles each, so this makes 6*2=12 triangles, and 12*3 vertices
 	static const GLfloat g_vertex_buffer_data[] = { 
@@ -180,30 +136,21 @@ int main( void )
 	glBindBuffer(GL_ARRAY_BUFFER, colorbuffer);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(g_color_buffer_data), g_color_buffer_data, GL_STATIC_DRAW);
 
-	GLuint pickleertexbuffer;
-	glGenBuffers(1, &pickleertexbuffer);
-	generatePickle();
-	glBindBuffer(GL_ARRAY_BUFFER, pickleertexbuffer);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat)*pickle_vertex_buffer_data.size(), &pickle_vertex_buffer_data[0], GL_STATIC_DRAW);
-
-	#define RADIUS 3
-	#define SPEED 0.0005
-
 	float x;
 	float z;
 
 	float radian = 0;
 	
 	do{	
-		x = RADIUS*sin(radian);
-		z = RADIUS*cos(radian);
-		radian += SPEED;
+		x = CAMERA_RADIUS*sin(radian);
+		z = CAMERA_RADIUS*cos(radian);
+		radian += RADIAN_SPEED;
 
 		// Camera matrix
 		glm::mat4 View       = glm::lookAt(
-									glm::vec3(x, 5, z), // Camera is at (4,3,-3), in World Space
-									glm::vec3(0,2,0), // and looks at the origin
-									glm::vec3(0,1,0)  // Head is up (set to 0,-1,0 to look upside-down)
+									glm::vec3(x, CAMERA_HEIGHT, z), // Camera is at (4,3,-3), in World Space
+									glm::vec3(0, CAMERA_VIEW_HEIGHT, 0), // and looks at the origin
+									glm::vec3(0, 1, 0)  // Head is up (set to 0,-1,0 to look upside-down)
 							);
 		// Our ModelViewProjection : multiplication of our 3 matrices
 		glm::mat4 MVP        = Projection * View * Model; // Remember, matrix multiplication is the other way around
@@ -262,28 +209,6 @@ int main( void )
 		glm::mat4 MVP2        = Projection * View * Model2; // Remember, matrix multiplication is the other way around
 		glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &MVP2[0][0]);
 		glDrawArrays(GL_TRIANGLES, 0, 12*3);
-
-
-		if ((int)(radian * 8) % 8 == 0 ) {
-			generatePickle();
-			glBindBuffer(GL_ARRAY_BUFFER, pickleertexbuffer);
-			glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat)*pickle_vertex_buffer_data.size(), &pickle_vertex_buffer_data[0], GL_STATIC_DRAW);
-		}
-		glBindBuffer(GL_ARRAY_BUFFER, pickleertexbuffer);
-		glVertexAttribPointer(
-			0,                  // attribute. No particular reason for 0, but must match the layout in the shader.
-			3,                  // size
-			GL_FLOAT,           // type
-			GL_FALSE,           // normalized?
-			0,                  // stride
-			(void*)0            // array buffer offset
-		);
-
-		glm::mat4 MVPPickle       = Projection * View * PickleModel;
-		glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &MVPPickle[0][0]);
-		glDrawArrays(GL_TRIANGLES, 0, pickle_vertex_buffer_data.size());
-
-
 
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(1);
